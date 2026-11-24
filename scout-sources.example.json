@@ -1,0 +1,60 @@
+{
+  "research": {
+    "enabled": true,
+    "llm": true,
+    "maxRunsPerSession": 30,
+    "maxTokensPerSession": 600000,
+    "maxTokensPerRun": 40000
+  },
+  "map": {
+    "maxExternal": 3
+  },
+  "calls": {
+    "perServer": 12,
+    "total": 30,
+    "perPrompt": 60
+  },
+  "mcp": {
+    "crm": {
+      "route": "client",
+      "searchTools": [
+        "search_notes"
+      ],
+      "fetchTools": [
+        "get_note"
+      ],
+      "external": false
+    },
+    "tickets": {
+      "route": "client",
+      "searchTools": [
+        "search_tickets"
+      ],
+      "fetchTools": [
+        "get_ticket"
+      ],
+      "external": false
+    },
+    "team-chat": {
+      "route": "client",
+      "searchTools": [
+        "search_messages"
+      ],
+      "fetchTools": [
+        "get_thread"
+      ],
+      "external": false
+    },
+    "web": {
+      "route": "client",
+      "searchTools": [
+        "web_search"
+      ],
+      "fetchTools": [
+        "fetch_page"
+      ],
+      "openWorld": true
+    }
+  },
+  "deny": []
+}

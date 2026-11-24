@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pi-scout: a sidekick that finds what an AI agent would miss</title>
+<!-- Explainer for pi-scout 0.2 (push delivery, no tool). -->
+<style>
+  @font-face { font-family: "Host Grotesk"; src: url("fonts/host-grotesk-latin.woff2") format("woff2"); font-weight: 300 800; font-display: swap; }
+  @font-face { font-family: "Hyper Mono"; src: url("fonts/atkinson-hyperlegible-mono-latin.woff2") format("woff2"); font-weight: 400 700; font-display: swap; }
+  :root {
+    --bg: #111317; --panel: #191c22; --line: #2b2f37; --fg: #ece9e3; --mut: #a19e96; --dim: #6f6d67;
+    --agent: #e3a046; --scout: #5fadea; --good: #70c48c; --warn: #d9a05b;
+    --sans: "Host Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "Hyper Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { background: var(--bg); }
+  body { color: var(--fg); font: 17px/1.55 var(--sans); }
+  main { max-width: 860px; margin: 0 auto; padding: 56px 24px 80px; }
+  section { margin-top: 64px; }
+  h1 { font-size: clamp(30px, 5vw, 44px); line-height: 1.1; letter-spacing: -.02em; font-weight: 700; }
+  h1 em { font-style: normal; color: var(--scout); }
+  .lead { font-size: 20px; color: var(--mut); margin-top: 18px; max-width: 60ch; }
+  .eyebrow { font: 600 12px/1 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--dim); margin-bottom: 12px; }
+  h2 { font-size: 26px; letter-spacing: -.01em; margin-bottom: 14px; }
+  p + p { margin-top: 12px; }
+  p { max-width: 66ch; }
+  .mut { color: var(--mut); }
+  b.a { color: var(--agent); font-weight: 600; } b.s { color: var(--scout); font-weight: 600; }
+  code, .mono { font-family: var(--mono); font-size: .88em; }
+
+  /* folder illustration */
+  .folder { margin-top: 22px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  .grid { display: grid; grid-template-columns: repeat(40, 1fr); gap: 3px; }
+  .grid i { aspect-ratio: 1; border-radius: 2px; background: #2c3038; }
+  .grid i.read { background: var(--agent); opacity: .85; }
+  .grid i.key { background: var(--good); box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--good); }
+  .key-legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 12px; font-size: 14px; color: var(--mut); }
+  .key-legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 7px; vertical-align: -1px; background: var(--c); }
+
+  /* timeline */
+  .tl { margin-top: 22px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px 20px 16px; }
+  .lanes { display: grid; grid-template-columns: 92px 1fr; row-gap: 14px; align-items: center; }
+  .lane-name { font-size: 14px; color: var(--mut); }
+  .track { position: relative; height: 34px; border-radius: 8px; background: #20242b; overflow: hidden; }
+  .seg { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; padding: 0 10px; font-size: 13px; white-space: nowrap; overflow: hidden; border-radius: 8px; opacity: .25; transition: opacity .35s; }
+  .seg.on { opacity: 1; }
+  .seg.agent { background: rgba(227,160,70,.22); color: var(--agent); border: 1px solid rgba(227,160,70,.5); }
+  .seg.scout { background: rgba(95,173,234,.2); color: var(--scout); border: 1px solid rgba(95,173,234,.5); }
+  .seg.list { background: var(--scout); color: #0b1620; font-weight: 600; border-radius: 8px; }
+  .axis { display: grid; grid-template-columns: 92px 1fr; margin-top: 6px; font: 12px var(--mono); color: var(--dim); }
+  .axis div:last-child { display: flex; justify-content: space-between; }
+  .controls { display: flex; gap: 10px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
+  button { font: 600 14px var(--sans); color: var(--fg); background: #262a32; border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+  button:hover { border-color: var(--scout); }
+  button:focus-visible, summary:focus-visible { outline: 2px solid var(--scout); outline-offset: 2px; }
+  .dots { display: flex; gap: 6px; }
+  .dots span { width: 8px; height: 8px; border-radius: 50%; background: #3a3f48; }
+  .dots span.on { background: var(--scout); }
+  .caption { margin-top: 14px; min-height: 3.2em; color: var(--fg); }
+  .caption .t { font-family: var(--mono); color: var(--scout); font-size: 14px; margin-right: 8px; }
+
+  /* the list */
+  .map { margin-top: 18px; background: #0d1014; border: 1px solid var(--line); border-left: 3px solid var(--scout); border-radius: 10px; padding: 14px 16px; font: 14px/1.7 var(--mono); color: var(--mut); overflow-x: auto; white-space: pre; }
+  .map b { color: var(--scout); font-weight: 700; } .map .p { color: var(--fg); } .map .o { color: var(--dim); }
+
+  /* sources */
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 18px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .card h3 { font-size: 16px; margin-bottom: 4px; }
+  .card p { font-size: 15px; color: var(--mut); }
+
+  /* results */
+  .res { margin-top: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+  .row { display: grid; grid-template-columns: 210px 1fr 96px; gap: 14px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+  .row:first-of-type { border-top: 0; }
+  .row .lbl { font-size: 15px; } .row .lbl small { display: block; font-size: 13px; color: var(--dim); }
+  .bars { display: grid; gap: 4px; }
+  .bar { height: 12px; border-radius: 3px; background: #262a31; position: relative; }
+  .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; }
+  .bar.b i { background: #62656d; } .bar.s i { background: var(--scout); }
+  .num { text-align: right; font: 600 15px var(--mono); }
+  .num.up { color: var(--good); } .num.flat { color: var(--mut); }
+  .legend { display: flex; gap: 18px; font-size: 13px; color: var(--mut); margin-bottom: 6px; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--c); }
+  ul.points { margin-top: 16px; padding-left: 20px; } ul.points li { margin: 7px 0; max-width: 66ch; }
+  ul.points li b { font-weight: 600; }
+
+  details { margin-top: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  summary { cursor: pointer; padding: 12px 16px; font-weight: 600; font-size: 15px; color: var(--mut); list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "+"; display: inline-block; width: 18px; color: var(--scout); font-family: var(--mono); }
+  details[open] summary::before { content: "–"; }
+  details > div { padding: 0 16px 14px 34px; font-size: 15px; color: var(--mut); }
+  details > div p { max-width: 70ch; } details ul { padding-left: 18px; } details li { margin: 5px 0; }
+  details b { color: var(--fg); font-weight: 600; }
+
+  footer { margin-top: 72px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 13px; color: var(--dim); }
+  footer a { color: var(--scout); }
+
+  @media (max-width: 640px) {
+    body { font-size: 16px; } main { padding-top: 36px; }
+    .cards { grid-template-columns: 1fr; }
+    .row { grid-template-columns: 1fr 84px; } .row .bars { grid-column: 1 / -1; order: 3; }
+    .lanes, .axis { grid-template-columns: 62px 1fr; }
+    .grid { grid-template-columns: repeat(24, 1fr); }
+    .seg { font-size: 0; padding: 0; } .seg.list { font-size: 11px; justify-content: center; }
+  }
+  @media (prefers-reduced-motion: reduce) { .seg { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <p class="eyebrow">pi-scout · add-on for the pi AI agent · Nov 2026</p>
+  <h1>A sidekick that finds <em>what an AI agent doesn't know it's missing</em></h1>
+  <p class="lead">pi-scout runs next to an AI agent while it works. It searches your files and tools on its own, then
+    hands the agent a short list of places worth checking. The agent decides what to open.</p>
+</header>
+
+<section aria-labelledby="h-problem">
+  <p class="eyebrow">The problem</p>
+  <h2 id="h-problem">In a big folder, one note changes the answer</h2>
+  <p>Ask an AI agent to write a client email from a folder of 3,000 notes. It reads what looks relevant and gets to
+    work. The note that matters — a newer price, a decision from a meeting, a correction in a chat — often uses
+    different words, so the agent never opens it and writes the old answer.</p>
+  <div class="folder" role="img" aria-label="A folder of 400 files: the agent reads about 30 of them; the one key note is elsewhere.">
+    <div class="grid" id="grid"></div>
+    <div class="key-legend"><span style="--c:#2c3038">files in the folder</span><span style="--c:var(--agent)">what the agent reads</span><span style="--c:var(--good)">the note that changes the answer</span></div>
+  </div>
+  <p style="margin-top:16px">When someone points the agent to that note, it nearly always uses it. <b>Finding it is the hard part.</b></p>
+</section>
+
+<section aria-labelledby="h-how">
+  <p class="eyebrow">How it works</p>
+  <h2 id="h-how">Two workers, side by side</h2>
+  <p>The <b class="a">agent</b> does the task. The <b class="s">scout</b> is a separate, cheaper AI that only searches.
+    It starts when you give the task, works in parallel, and about 8 seconds later slips one short list into the
+    agent's conversation.</p>
+
+  <div class="tl" id="tl">
+    <div class="lanes">
+      <div class="lane-name">Agent</div>
+      <div class="track">
+        <div class="seg agent" data-step="0" style="left:0;width:56%">reads, explores, drafts…</div>
+        <div class="seg agent" data-step="3" style="left:57%;width:43%">opens the leads, finishes</div>
+      </div>
+      <div class="lane-name">Scout</div>
+      <div class="track">
+        <div class="seg scout" data-step="1" style="left:0;width:24%">plans searches</div>
+        <div class="seg scout" data-step="1" style="left:25%;width:30%">searches, picks leads</div>
+        <div class="seg list" data-step="2" style="left:56%;width:12%">list ➜</div>
+      </div>
+    </div>
+    <div class="axis"><div></div><div><span>0 s · task given</span><span>~8 s</span><span>done</span></div></div>
+    <div class="controls">
+      <button id="prev" aria-label="Previous step">←</button>
+      <button id="next" aria-label="Next step">Next →</button>
+      <div class="dots" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+    </div>
+    <p class="caption" id="cap" aria-live="polite"></p>
+  </div>
+
+  <p style="margin-top:22px">The list points to places, never to answers: a file or message, its date, and whether
+    something newer exists on the same subject. It stays short: a few hundred words at most.</p>
+<div class="map" aria-label="Example list"><b>Scout: places worth checking</b>
+<span class="p">1. emails/harbour/2026-03-02 re: launch timing.txt</span>   Mar 2  · newer than 2
+<span class="o">2. plans/launch-plan-v3.md                         Jan 10 · older</span>
+<span class="p">3. ticket #4117 "Pricing exception" (helpdesk)</span>     Feb 28
+<span class="p">4. notes/2026-02-14 steering committee.md</span>          Feb 14</div>
+  <p class="mut" style="margin-top:12px">The dates and "newer than" links let the agent tell a current note from an
+    outdated one, instead of trusting whichever it opens first.</p>
+
+  <details>
+    <summary>How the scout searches</summary>
+    <div>
+      <p>Each time you give a task, the scout makes three calls to a small, fast AI model (Claude Haiku in the tests):</p>
+      <ul>
+        <li><b>Plan:</b> from the task and an overview of the folder, it writes many searches: synonyms, the other
+          language (English/French), names of people and clients, and how a rule or a correction would be worded.</li>
+        <li><b>Gather:</b> it runs them on files, history and connected tools, adds the newest files of the folders it
+          picked, and summarises about 100 candidates in a line or two each.</li>
+        <li><b>Judge and follow up:</b> it keeps the most promising ones, runs a second round of searches based on
+          what it found, and keeps up to 12. Copies of the same file are merged, newest first.</li>
+      </ul>
+      <p>The list skips anything the agent has already opened. One list per task.</p>
+    </div>
+  </details>
+</section>
+
+<section aria-labelledby="h-where">
+  <p class="eyebrow">Where it looks</p>
+  <h2 id="h-where">Your files, and the tools you connect</h2>
+  <div class="cards">
+    <div class="card"><h3>Files</h3><p>The files in the folder the agent works in: notes, docs, emails saved as text, data files.</p></div>
+    <div class="card"><h3>History</h3><p>Commit messages, when the folder is a git repository: decisions often live there.</p></div>
+    <div class="card"><h3>Connected tools</h3><p>Search tools you list in a config file: tickets, CRM, team chat, web search.</p></div>
+  </div>
+  <details>
+    <summary>Privacy and safety rules</summary>
+    <div>
+      <ul>
+        <li><b>Files only by default.</b> A tool is searched only if you list it in <code>~/.pi/agent/scout-sources.json</code>,
+          and only its read-only search and fetch functions are used.</li>
+        <li><b>Same AI provider as your session.</b> Short summaries of candidates go to the scout's model on the
+          provider you already use. Passwords, keys and tokens are blanked out first.</li>
+        <li><b>Web searches get only your own words.</b> Names and details from your files are never sent to public search.</li>
+        <li><b>Public pages stay in their place.</b> At most 3 web results per list, and a web page can never mark one
+          of your own documents as outdated.</li>
+        <li><b>Limits on every run:</b> capped number of tool calls, a few seconds per call, and a token budget per session.</li>
+      </ul>
+    </div>
+  </details>
+</section>
+
+<section aria-labelledby="h-results">
+  <p class="eyebrow">How well it works</p>
+  <h2 id="h-results">It helps most in big folders</h2>
+  <p>We tested it on generated folders — notes vaults, wikis, shared drives, code repos, ticket and chat systems —
+    each hiding one note the task depends on. Each bar is how often the agent's final answer used that note.</p>
+
+  <div class="res">
+    <div class="legend"><span style="--c:#62656d">agent alone</span><span style="--c:var(--scout)">agent + scout</span></div>
+    <div class="row"><div class="lbl">Big folders<small>6 new folders, 2,000–4,000 files</small></div>
+      <div class="bars"><div class="bar b"><i style="width:33%"></i></div><div class="bar s"><i style="width:88%"></i></div></div>
+      <div class="num up">33 → 88 %</div></div>
+    <div class="row"><div class="lbl">Final blind test<small>8 unseen folders, small and big</small></div>
+      <div class="bars"><div class="bar b"><i style="width:45%"></i></div><div class="bar s"><i style="width:53%"></i></div></div>
+      <div class="num flat">45 → 53 %</div></div>
+    <div class="row"><div class="lbl">Current version<small>25 practice folders</small></div>
+      <div class="bars"><div class="bar b"><i style="width:54%"></i></div><div class="bar s"><i style="width:66%"></i></div></div>
+      <div class="num up">54 → 66 %</div></div>
+  </div>
+
+  <ul class="points">
+    <li><b>Big folders gain the most.</b> In small folders the agent already reads nearly everything on its own.</li>
+    <li><b>The final blind test shows a small gain</b> that could still be chance; its big folders went from 36 % to 58 %.</li>
+    <li><b>It stayed safe:</b> answers were never worse overall, a booby-trapped web page was never followed, and the
+      scout never changed anything.</li>
+    <li><b>It costs little:</b> about 10–25 thousand tokens of a small model per task, and the main agent used about 40 % fewer tokens because it explored less.</li>
+  </ul>
+
+  <details>
+    <summary>How it was tested</summary>
+    <div>
+      <ul>
+        <li>Each test folder hides one key note, written with different words from the task, among decoys such as an
+          outdated "official" version and near-duplicates. A script checks the final answer.</li>
+        <li>Every setup runs side by side on the same folders: the agent alone, the agent with the scout, and the agent
+          given the key note directly (the best possible case).</li>
+        <li>The scout was frozen before each test, and the pass rule was written down in advance. Each blind set was used once.</li>
+        <li>The agent in all tests was Claude Haiku 5.5, running in a sandbox that could only see its own folder.</li>
+      </ul>
+    </div>
+  </details>
+  <details>
+    <summary>What the numbers above measure exactly</summary>
+    <div>
+      <ul>
+        <li><b>Big folders (33 → 88 %):</b> 24 runs per setup, +54 points, p &lt; 0.001. The agent given the note
+          directly reached 92 %. Measured with the previous version, where the agent asked for the list itself.</li>
+        <li><b>Final blind test (45 → 53 %):</b> 96 runs per setup, +8 points, p = 0.29. Big folders only: +22 points,
+          p = 0.10. Same previous version.</li>
+        <li><b>Current version (54 → 66 %):</b> 50 runs per setup. It came within 4 points of the previous version,
+          while delivering the list automatically. Main-agent tokens: 195k against 337k for the agent alone.</li>
+      </ul>
+    </div>
+  </details>
+</section>
+
+<section aria-labelledby="h-limits">
+  <p class="eyebrow">Keep in mind</p>
+  <h2 id="h-limits">Limits</h2>
+  <ul class="points">
+    <li><b>Tested on generated folders</b> with one agent model; real notes are messier.</li>
+    <li><b>The list can include an outdated document.</b> The dates and "newer than" links usually steer the agent to the
+      current one, but not every time.</li>
+    <li><b>It adds a few seconds</b> before the list arrives, and pays off mainly in folders too big to read entirely.</li>
+  </ul>
+  <details>
+    <summary>How it got here</summary>
+    <div>
+      <p>Seven versions over three days. Early ones slipped a single confident tip into the agent; it trusted the tip
+        even when it was wrong, so results suffered. The current design gives a dated list of several places and leaves
+        the choice to the agent. The search moved from small local models, which couldn't judge relevance, to a small
+        cloud model that plans and judges its own searches.</p>
+    </div>
+  </details>
+  <details>
+    <summary>Install</summary>
+    <div>
+      <p><code>pi install git:github.com/cfstcyr/pi-scout</code> for every session, or add <code>-l</code> inside one folder
+        to install it there only. Optional: list connected tools in <code>~/.pi/agent/scout-sources.json</code>
+        (example in the repository).</p>
+    </div>
+  </details>
+</section>
+
+<footer>
+  Source, install and configuration: <a href="https://github.com/cfstcyr/pi-scout">github.com/cfstcyr/pi-scout</a>.
+  Measurements come from a private experiment (Nov 2026); folders were generated, the agent was Claude Haiku 5.5.
+</footer>
+
+</main>
+<script>
+(() => {
+  // folder illustration: 400 cells, ~30 read, 1 key
+  const g = document.getElementById('grid');
+  const read = new Set([3,4,5,11,12,44,45,46,52,85,86,87,93,126,127,133,166,167,173,206,212,246,247,286,326,327,48,49,90,91]);
+  for (let i = 0; i < 400; i++) {
+    const c = document.createElement('i');
+    if (read.has(i)) c.className = 'read';
+    if (i === 317) c.className = 'key';
+    g.appendChild(c);
+  }
+  // timeline stepper
+  const caps = [
+    ['0 s', 'You give the task. The agent starts reading and exploring, as it always would.'],
+    ['0–8 s', 'At the same moment, the scout starts on its own: it plans searches, runs them across files and tools, and picks the best leads.'],
+    ['~8 s', 'The scout drops one short list into the agent\u2019s conversation. No action from the agent is needed.'],
+    ['after', 'The agent reads the list, opens the leads that look useful, and finishes the task with what it found.']
+  ];
+  const segs = [...document.querySelectorAll('.seg')], dots = [...document.querySelectorAll('.dots span')];
+  const cap = document.getElementById('cap'); let s = 0;
+  function show() {
+    segs.forEach(x => x.classList.toggle('on', +x.dataset.step <= s));
+    dots.forEach((d, i) => d.classList.toggle('on', i === s));
+    cap.innerHTML = '<span class="t">' + caps[s][0] + '</span>' + caps[s][1];
+    document.getElementById('next').textContent = s === 3 ? 'Restart ↺' : 'Next →';
+  }
+  document.getElementById('next').onclick = () => { s = s === 3 ? 0 : s + 1; show(); };
+  document.getElementById('prev').onclick = () => { s = Math.max(0, s - 1); show(); };
+  document.getElementById('tl').addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight') { s = Math.min(3, s + 1); show(); }
+    if (e.key === 'ArrowLeft') { s = Math.max(0, s - 1); show(); }
+  });
+  show();
+})();
+</script>
+</body>
+</html>

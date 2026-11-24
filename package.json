@@ -1,0 +1,34 @@
+{
+  "name": "pi-scout",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Background researcher for pi: searches your folder and opted-in tools while the agent works, then hands it one short dated list of places worth checking.",
+  "type": "module",
+  "keywords": [
+    "pi-package"
+  ],
+  "license": "UNLICENSED",
+  "pi": {
+    "extensions": [
+      "./src/extension.ts"
+    ],
+    "changelogPath": "./CHANGELOG.md"
+  },
+  "files": [
+    "src/",
+    "README.md",
+    "CHANGELOG.md",
+    "scout-sources.example.json"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "scripts": {
+    "test": "bun test test/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cfstcyr/pi-scout"
+  },
+  "homepage": "https://cfstcyr.github.io/pi-scout/"
+}
